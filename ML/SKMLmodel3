@@ -1,0 +1,132 @@
+from sklearn.neural_network import MLPClassifier
+from sklearn.model_selection import train_test_split, GridSearchCV, RandomizedSearchCV, RepeatedStratifiedKFold
+from sklearn.preprocessing import StandardScaler
+from sklearn.pipeline import make_pipeline
+from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
+import pandas as pd
+import numpy as np
+from joblib import dump, load, parallel_backend
+from scipy import stats
+
+
+df = pd.read_excel("/Users/colesakata/Documents/GitHub/HASP-ML Model/xlsx_nanRemoved/mldata_ANT_GSA3_noNaN.xlsx")
+
+
+arr = df.to_numpy()
+arr = np.delete(arr, 0, axis=0)
+x = np.delete(arr,5,axis=1) 
+
+y = (arr[:, [5]])
+y = (np.ravel(y))
+
+X_train, X_test, y_train, y_test = train_test_split(
+        x, y, test_size=0.2, random_state=42
+)
+
+#x_min, x_max = x[:, 0].min() - 0.5, x[:, 0].max() + 0.5
+#y_min, y_max = y[:].min() - 0.5, y[:].max() + 0.5
+
+scaler = StandardScaler().fit(X_train)
+X_train = scaler.transform(X_train)
+X_test = scaler.transform(X_test)
+
+
+"""
+print(np.size(x,0))
+print(np.size(x,1))
+print(type(x))
+print(np.size(y,0))
+print(type(y))
+"""
+
+'''
+param_grid = {
+    'hidden_layer_sizes': [[27, 4], [32, 4], [64, 4]],
+    'activation': ['tanh', 'relu'],
+    'alpha':[5e-8, 1e-8, 4e-9], 
+    'solver':['adam', 'lbfgs'], 
+    'learning_rate_init':[2e-3, 8e-4, 1e-4, 5e-5]
+}
+'''
+param_dist = {
+    'learning_rate_init':stats.uniform(loc=5e-5,scale=2e-3)
+}
+
+with parallel_backend('threading', n_jobs=-1): 
+    #(246, 140) 0.000000003776571094
+    clf = MLPClassifier(hidden_layer_sizes=(297, 281, 32), activation='tanh', solver='adam',
+                        alpha=0.000000354643,batch_size=1,random_state=1, verbose=True,
+                        early_stopping=False, validation_fraction=0.10, tol=0.0001,
+                        learning_rate_init=8e-4, max_iter=1000, n_iter_no_change=80)
+    
+    #clf = load('mlclf19.joblib')
+    #cv = RepeatedStratifiedKFold(n_splits=10, n_repeats=10, random_state=1)
+    #search = GridSearchCV(estimator=clf, param_grid=param_grid, scoring='roc_auc', cv=cv)
+   #n_iter_search = 1
+    #rsearch = RandomizedSearchCV(estimator=clf,param_distributions=param_dist,n_iter=n_iter_search, cv=cv)
+    clf = make_pipeline(StandardScaler(), clf)
+    clf.fit(X_train, y_train)
+    '''
+    rsearch.fit(X_train, y_train)
+    results_df = pd.DataFrame(rsearch.cv_results_)
+    results_df = results_df.sort_values(by=["rank_test_score"])
+    results_df = results_df.set_index(
+    results_df["params"].apply(lambda x: "_".join(str(val) for val in x.values()))).rename_axis("kernel")
+    results_df[["params", "rank_test_score", "mean_test_score", "std_test_score"]]
+    #create df of model scores ordered by performance
+    model_scores = results_df.filter(regex=r"split\d*_test_score")
+
+    # plot 30 examples of dependency between cv fold and AUC scores
+    fig, ax = plt.subplots()
+    sns.lineplot(
+        data=model_scores.transpose().iloc[:30],
+        dashes=False,
+        palette="Set1",
+        marker="o",
+        alpha=0.5,
+        ax=ax,
+    )
+    ax.set_xlabel("CV test fold", size=12, labelpad=10)
+    ax.set_ylabel("Model AUC", size=12)
+    ax.tick_params(bottom=True, labelbottom=False)
+    plt.show()
+
+    # print correlation of AUC scores across folds
+    print(f"Correlation of models:\n {model_scores.transpose().corr()}")
+    '''
+
+
+    score = clf.score(X_test, y_test)
+    print(score)
+
+    # Make predictions
+    y_pred = clf.predict(X_test)
+
+    # 1. Basic accuracy score
+    print("Accuracy Score:", accuracy_score(y_test, y_pred))
+    print("=" * 50)
+
+    # 2. Detailed classification report (precision, recall, F1-score)
+    print("\nClassification Report:")
+    print(classification_report(y_test, y_pred))
+    print("=" * 50)
+
+    # 3. Confusion Matrix
+    print("\nConfusion Matrix:")
+    print(confusion_matrix(y_test, y_pred))
+    print("=" * 50)
+
+    # 4. Show some individual predictions vs actual values
+    print("\nSample Predictions (first 20):")
+    comparison = pd.DataFrame({
+        'Actual': y_test[:20].flatten(),
+        'Predicted': y_pred[:20].flatten()
+    })
+    print(comparison)
+
+    # 5. Count correct vs incorrect predictions
+    correct = (y_pred == y_test).sum()
+    total = len(y_test)
+    print(f"\nCorrect predictions: {correct}/{total} ({100*correct/total:.2f}%)")
+
+    dump(clf, 'mlclf23.joblib')
